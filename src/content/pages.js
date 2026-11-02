@@ -3686,6 +3686,9 @@ export const pageMarkup = {
     "      </div>",
     "    </section>",
     "  "
+  ].join("\n"),
+  "about.html": [
+    "<section class=\"section\"><div class=\"container about-page\"><h1 class=\"section-title\">About Gabay sa Lakbay</h1><p class=\"section-description\">Gabay sa Lakbay is a student-made field guide to beaches, rivers, and mountains across Luzon, the Visayas, and Mindanao.</p><h2>Explore with care</h2><p>Use the guide to discover destinations, review practical travel notes, and find map links for planning a visit. Destination conditions, access rules, fees, and schedules can change, so confirm current details with local tourism offices before traveling.</p><p>The project was created by AproJ³ Company as a school project. Destination information and photographs belong to their respective sources; photo credits are listed on the <a href=\"credits.html\">credits page</a>.</p></div></section>"
   ].join("\n")
 };
 

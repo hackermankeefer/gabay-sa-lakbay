@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { pageMarkup } from './content/pages.js';
+import { safetyGuideMarkup } from './content/safety-guide.js';
 
 const regions = [
   { id: 'luzon', label: 'Luzon', summary: 'Mountain trails, quiet coves, and river adventures across the north.', image: '/images/cover-luzon.jpg' },
@@ -40,9 +41,32 @@ function Header() {
       <nav aria-label="Main navigation">
         <ul className={`nav-links ${menuOpen ? 'active' : ''}`} id="site-navigation">
           <li><Link to="/">Home</Link></li>
-          {regions.map((region) => <li className={`dropdown ${openDropdown === region.id ? 'open' : ''}`} key={region.id}>
-            <button className="nav-disclosure" aria-expanded={openDropdown === region.id} onClick={() => setOpenDropdown(openDropdown === region.id ? '' : region.id)}>{region.label}<span aria-hidden="true">{openDropdown === region.id ? '−' : '+'}</span></button>
-            <ul className="dropdown-content">{categories.map((category) => <li key={category}><Link to={`/${region.id}/${category}`}>{category}</Link></li>)}<li><Link to={`/${region.id}`}>Explore all {region.label}</Link></li></ul>
+          {regions.map((region) => <li
+            className={`dropdown ${openDropdown === region.id ? 'open' : ''}`}
+            key={region.id}
+            onMouseEnter={() => {
+              if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) setOpenDropdown(region.id);
+            }}
+            onMouseLeave={(event) => {
+              if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                setOpenDropdown((current) => current === region.id ? '' : current);
+              }
+            }}
+            onFocus={() => setOpenDropdown(region.id)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setOpenDropdown((current) => current === region.id ? '' : current);
+              }
+            }}
+          >
+            <button className="nav-disclosure" aria-expanded={openDropdown === region.id} onClick={(event) => {
+              if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                event.currentTarget.blur();
+                return;
+              }
+              setOpenDropdown(openDropdown === region.id ? '' : region.id);
+            }}>{region.label}<span aria-hidden="true">{openDropdown === region.id ? '−' : '+'}</span></button>
+            <ul className="dropdown-content">{categories.map((category) => <li key={category}><Link to={`/${region.id}/${category}`} onClick={(event) => { event.currentTarget.blur(); setOpenDropdown(''); }}>{category}</Link></li>)}<li><Link to={`/${region.id}`} onClick={(event) => { event.currentTarget.blur(); setOpenDropdown(''); }}>Explore all {region.label}</Link></li></ul>
           </li>)}
           <li><Link to="/safety">Safety &amp; Tips</Link></li><li><Link to="/directions">Directions</Link></li><li><Link to="/about">About</Link></li>
         </ul>
@@ -81,8 +105,10 @@ function LegacyContent({ file, searchable = false }) {
   useEffect(() => setQuery(''), [file]);
   const html = useMemo(() => {
     const sourceFile = pageMarkupAliases[file] ?? file;
-    const markup = pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
+    const markup = file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
+    parsed.querySelectorAll('.region-cover, .cover-fallback').forEach((cover) => cover.remove());
+    parsed.querySelectorAll('.category-title').forEach((title) => title.remove());
 
     if (pageMarkupAliases[file]) {
       const [region, category] = file.replace('.html', '').split('-');
@@ -93,7 +119,7 @@ function LegacyContent({ file, searchable = false }) {
       section.className = 'region-section';
       const container = parsed.createElement('div');
       container.className = 'container';
-      container.innerHTML = `<h1 class="section-title">${regionLabel} ${categoryLabel}</h1><h2>${regionLabel}</h2><p class="section-description">Browse ${cards.length} ${categoryLabel.toLowerCase()} across ${regionLabel}.</p><img class="region-cover" src="images/cover-${region}.jpg" alt="${regionLabel} landscape" loading="lazy"><h3 class="category-title">${categoryLabel}</h3>`;
+      container.innerHTML = `<h1 class="section-title">${regionLabel} ${categoryLabel}</h1><h2>${regionLabel}</h2><p class="section-description">Browse ${cards.length} ${categoryLabel.toLowerCase()} across ${regionLabel}.</p>`;
       const grid = parsed.createElement('div');
       grid.className = 'card-grid';
       cards.forEach((card) => grid.append(card));
@@ -118,6 +144,7 @@ function LegacyContent({ file, searchable = false }) {
       if (event.defaultPrevented || !(event.target instanceof Element)) return;
       const anchor = event.target.closest('a[href]');
       if (!anchor || anchor.target === '_blank') return;
+      if (anchor.hash && anchor.pathname === window.location.pathname) return;
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin) return;
       const route = oldPageRoutes[url.pathname] ?? (contentPages[url.pathname] ? url.pathname : null);
