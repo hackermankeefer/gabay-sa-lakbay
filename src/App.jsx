@@ -9,6 +9,12 @@ const regions = [
   { id: 'mindanao', label: 'Mindanao', summary: 'Big landscapes, vivid blue waters, and mountain country in the south.', image: '/images/cover-mindanao.jpg' },
 ];
 const categories = ['beaches', 'rivers', 'mountains'];
+const teamMembers = [
+  { name: 'Judielyn Dagohoy', image: 'judielyn-dagohoy.jpg', initials: 'JD' },
+  { name: 'Andrea Mae Bajamunde', image: 'andrea-mae-bajamunde.jpg', initials: 'AB' },
+  { name: 'Jenny Legria', image: 'jenny-legria.jpg', initials: 'JL' },
+  { name: 'Jannah Aladano Ebit', image: 'jannah-aladano-ebit.jpg', initials: 'JE' },
+];
 const contentPages = {
   '/luzon': 'luzon.html', '/visayas': 'visayas.html', '/mindanao': 'mindanao.html',
   '/luzon/beaches': 'luzon-beaches.html', '/luzon/rivers': 'luzon-rivers.html', '/luzon/mountains': 'luzon-mountains.html',
@@ -24,6 +30,41 @@ const pageMarkupAliases = {
 };
 const oldPageRoutes = Object.fromEntries(Object.entries(contentPages).map(([path, file]) => [`/${file}`, path]));
 oldPageRoutes['/index.html'] = '/';
+
+function buildDirectionsMarkup() {
+  const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  const groups = regions.map((region) => ({
+    ...region,
+    categories: categories.map((category) => {
+      const file = `${region.id}-${category}.html`;
+      const sourceFile = pageMarkupAliases[file] ?? file;
+      const document = new DOMParser().parseFromString(pageMarkup[sourceFile] ?? '', 'text/html');
+      const places = [...document.querySelectorAll('.place-card')].map((card) => {
+        const name = card.querySelector('.place-body h4')?.textContent.replace(/^\s*\d+\.\s*/, '').trim() ?? '';
+        const location = [...card.querySelectorAll('.place-body p')]
+          .find((paragraph) => paragraph.querySelector('strong')?.textContent.trim().startsWith('Location'))
+          ?.textContent.replace(/^\s*Location:\s*/i, '').trim() ?? '';
+        return { name, location };
+      }).filter((place) => place.name);
+      return { category, places };
+    }),
+  }));
+  const total = groups.reduce((sum, region) => sum + region.categories.reduce((count, category) => count + category.places.length, 0), 0);
+  const regionsMarkup = groups.map((region) => {
+    const regionTotal = region.categories.reduce((count, category) => count + category.places.length, 0);
+    const categoriesMarkup = region.categories.map(({ category, places }) => `
+      <section class="direction-category" aria-labelledby="${region.id}-${category}-title">
+        <div class="direction-category-heading"><h3 id="${region.id}-${category}-title">${escapeHtml(category[0].toUpperCase() + category.slice(1))}</h3><span>${places.length} places</span></div>
+        <div class="direction-grid">${places.map(({ name, location }) => {
+          const query = encodeURIComponent(`${name}, ${location}`);
+          const searchText = escapeHtml(`${name} ${location} ${category} ${region.label}`);
+          return `<article class="direction-place" data-search="${searchText}"><h4>${escapeHtml(name)}</h4><p>${escapeHtml(location || region.label)}</p><a class="button" href="https://www.google.com/maps/search/?api=1&amp;query=${query}" target="_blank" rel="noopener noreferrer">Open map</a></article>`;
+        }).join('')}</div>
+      </section>`).join('');
+    return `<section class="direction-region" aria-labelledby="${region.id}-directions-title"><div class="direction-region-heading"><h2 id="${region.id}-directions-title">${escapeHtml(region.label)}</h2><span>${regionTotal} destinations</span></div>${categoriesMarkup}</section>`;
+  }).join('');
+  return `<section class="section directions-directory"><div class="container"><h1 class="section-title">Directions</h1><p class="section-description">Browse all ${total} destinations by region and type. Open a map for directions, then confirm current access and transport details before you travel.</p>${regionsMarkup}</div></section>`;
+}
 
 function TopBar() {
   return <div className="top-bar"><span>Plan a good trip. Tread lightly.</span><Link to="/safety">Travel with care</Link></div>;
@@ -104,9 +145,36 @@ function LegacyContent({ file, searchable = false }) {
   const navigate = useNavigate();
   useEffect(() => setQuery(''), [file]);
   const html = useMemo(() => {
-    const sourceFile = pageMarkupAliases[file] ?? file;
-    const markup = file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
+    const sourceFile = pageMarkupAliases[file] ?? (file === 'mindanao.html' ? 'mindanao-overview.html' : file);
+    const markup = file === 'directions.html' ? buildDirectionsMarkup() : file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
+    if (file === 'about.html') {
+      const list = parsed.querySelector('.about-team-list');
+      if (list) {
+        list.className = 'about-team-grid';
+        list.replaceChildren();
+        teamMembers.forEach(({ name, image, initials }) => {
+          const member = parsed.createElement('article');
+          member.className = 'about-team-member';
+          const portrait = parsed.createElement('div');
+          portrait.className = 'team-portrait';
+          const fallback = parsed.createElement('span');
+          fallback.className = 'team-initials';
+          fallback.setAttribute('aria-hidden', 'true');
+          fallback.textContent = initials;
+          const photo = parsed.createElement('img');
+          photo.src = `/images/team/${image}`;
+          photo.alt = `Portrait of ${name}`;
+          photo.loading = 'lazy';
+          photo.setAttribute('onerror', 'this.remove()');
+          portrait.append(photo, fallback);
+          const nameElement = parsed.createElement('h3');
+          nameElement.textContent = name;
+          member.append(portrait, nameElement);
+          list.append(member);
+        });
+      }
+    }
     parsed.querySelectorAll('.region-cover, .cover-fallback').forEach((cover) => cover.remove());
     parsed.querySelectorAll('.category-title').forEach((title) => title.remove());
 
@@ -157,14 +225,15 @@ function LegacyContent({ file, searchable = false }) {
   const filteredHtml = useMemo(() => {
     if (!query.trim()) return html;
     const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-    parsed.querySelectorAll('.place-card').forEach((card) => {
-      card.classList.toggle('hidden-card', !card.textContent.toLowerCase().includes(query.trim().toLowerCase()));
+    parsed.querySelectorAll('.place-card, .direction-place').forEach((card) => {
+      const searchableText = `${card.getAttribute('data-search') ?? ''} ${card.textContent}`.toLowerCase();
+      card.classList.toggle('hidden-card', !searchableText.includes(query.trim().toLowerCase()));
     });
     return parsed.body.innerHTML;
   }, [html, query]);
 
   return <main className="legacy-main">
-    {searchable && <div className="container browse-tools"><label htmlFor="destination-search">Search these destinations</label><input id="destination-search" type="search" placeholder="Try a name or location…" value={query} onChange={(event) => setQuery(event.target.value)} /><span aria-live="polite">{query ? `Filtering by “${query}”` : 'Search by destination or location'}</span></div>}
+    {searchable && <div className="container browse-tools"><label htmlFor="destination-search">{file === 'directions.html' ? 'Search all destinations' : 'Search these destinations'}</label><input id="destination-search" type="search" placeholder={file === 'directions.html' ? 'Name, location, region, or type…' : 'Try a name or location…'} value={query} onChange={(event) => setQuery(event.target.value)} /><span aria-live="polite">{query ? `Filtering by “${query}”` : file === 'directions.html' ? 'Search all 90 places by name, region, or type' : 'Search by destination or location'}</span></div>}
     <div className="legacy-content" dangerouslySetInnerHTML={{ __html: filteredHtml }} />
   </main>;
 }
@@ -194,8 +263,8 @@ export default function App() {
     <Route path="/" element={<Home />} />
     <Route path="/:region/:category" element={<CategoryPage />} />
     <Route path="/:region" element={<RegionPage />} />
-    {Object.entries(contentPages).filter(([path]) => !/^\/(luzon|visayas|mindanao)(\/|$)/.test(path)).map(([path, file]) => <Route key={path} path={path} element={<LegacyContent file={file} />} />)}
-    {Object.entries(oldPageRoutes).map(([path, route]) => <Route key={path} path={path} element={route === '/' ? <Home /> : <LegacyContent file={contentPages[route]} searchable={/\/(beaches|rivers|mountains)$/.test(route)} />} />)}
+    {Object.entries(contentPages).filter(([path]) => !/^\/(luzon|visayas|mindanao)(\/|$)/.test(path)).map(([path, file]) => <Route key={path} path={path} element={<LegacyContent file={file} searchable={path === '/directions'} />} />)}
+    {Object.entries(oldPageRoutes).map(([path, route]) => <Route key={path} path={path} element={route === '/' ? <Home /> : <LegacyContent file={contentPages[route]} searchable={route === '/directions' || /\/(beaches|rivers|mountains)$/.test(route)} />} />)}
     <Route path="*" element={<NotFound />} />
   </Routes><Footer /></>;
 }
