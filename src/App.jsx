@@ -4,6 +4,7 @@ import BackToTopButton from './components/BackToTopButton.jsx';
 import DestinationFinder from './components/DestinationFinder.jsx';
 import { buildDirectionsMarkup } from './content/directions.js';
 import { normalizeSearchText } from './content/destinations.js';
+import { buildRegionOverviewMarkup } from './content/region-overview.js';
 import { pageMarkup } from './content/pages.js';
 import { safetyGuideMarkup } from './content/safety-guide.js';
 import { categories, contentPages, oldPageRoutes, pageMarkupAliases, regions } from './data/site.js';
@@ -115,8 +116,10 @@ function LegacyContent({ file, searchable = false }) {
   const navigate = useNavigate();
   useEffect(() => setQuery(new URLSearchParams(location.search).get('q') ?? ''), [file, location.search]);
   const html = useMemo(() => {
+    const regionId = file.replace('.html', '');
+    const isRegionOverview = regions.some((region) => region.id === regionId);
     const sourceFile = pageMarkupAliases[file] ?? (file === 'mindanao.html' ? 'mindanao-overview.html' : file);
-    const markup = file === 'directions.html' ? buildDirectionsMarkup() : file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
+    const markup = isRegionOverview ? buildRegionOverviewMarkup(regionId) : file === 'directions.html' ? buildDirectionsMarkup() : file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
     if (file === 'about.html') {
       const list = parsed.querySelector('.about-team-list');

@@ -13,7 +13,8 @@ export function getDestinationGroups() {
         const location = [...card.querySelectorAll('.place-body p')]
           .find((paragraph) => paragraph.querySelector('strong')?.textContent.trim().startsWith('Location'))
           ?.textContent.replace(/^\s*Location:\s*/i, '').trim() ?? '';
-        return { name, location, path: `/${region.id}/${category}` };
+        const image = card.querySelector('.place-card img')?.getAttribute('src') ?? '';
+        return { name, location, image: image.startsWith('/') ? image : `/${image}`, path: `/${region.id}/${category}` };
       }).filter((place) => place.name);
       return { category, places };
     }),
