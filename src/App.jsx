@@ -121,6 +121,10 @@ function LegacyContent({ file, searchable = false }) {
     const sourceFile = pageMarkupAliases[file] ?? (file === 'mindanao.html' ? 'mindanao-overview.html' : file);
     const markup = isRegionOverview ? buildRegionOverviewMarkup(regionId) : file === 'directions.html' ? buildDirectionsMarkup() : file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
+    parsed.querySelectorAll('.place-body p').forEach((paragraph) => {
+      const label = paragraph.querySelector('strong')?.textContent.trim().toLowerCase();
+      if (label?.startsWith('photo:')) paragraph.remove();
+    });
     if (file === 'about.html') {
       const list = parsed.querySelector('.about-team-list');
       if (list) {
