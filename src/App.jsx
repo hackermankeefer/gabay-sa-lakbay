@@ -7,6 +7,8 @@ import { normalizeSearchText } from './content/destinations.js';
 import { buildRegionOverviewMarkup } from './content/region-overview.js';
 import { pageMarkup } from './content/pages.js';
 import { safetyGuideMarkup } from './content/safety-guide.js';
+import galleryPhotoCredits from './content/gallery-photo-credits.json';
+import destinationImageFiles from './content/destination-image-files.json';
 import { categories, contentPages, oldPageRoutes, pageMarkupAliases, regions } from './data/site.js';
 const teamMembers = [
   { name: 'Judielyn Dagohoy', image: 'judielyn-dagohoy.jpg', initials: 'JD' },
@@ -112,6 +114,7 @@ function Home() {
 
 function LegacyContent({ file, searchable = false }) {
   const [query, setQuery] = useState('');
+  const [photoGallery, setPhotoGallery] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => setQuery(new URLSearchParams(location.search).get('q') ?? ''), [file, location.search]);
@@ -121,10 +124,73 @@ function LegacyContent({ file, searchable = false }) {
     const sourceFile = pageMarkupAliases[file] ?? (file === 'mindanao.html' ? 'mindanao-overview.html' : file);
     const markup = isRegionOverview ? buildRegionOverviewMarkup(regionId) : file === 'directions.html' ? buildDirectionsMarkup() : file === 'safety.html' ? safetyGuideMarkup : pageMarkup[sourceFile] ?? '<section class="section"><div class="container"><h1>Page unavailable</h1><p>This guide page could not be loaded.</p></div></section>';
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
+    parsed.querySelectorAll('.place-card').forEach((card) => {
+      const primaryPhoto = card.querySelector('.place-card > img[src]');
+      if (!primaryPhoto) return;
+      const source = primaryPhoto.getAttribute('src');
+      const basePath = source.replace(/\.jpe?g$/i, '');
+      const galleryBasePath = basePath.replace(/^((?:images\/destinations\/)?(?:luzon|visayas|mindanao)-beach-\d+)-4$/, '$1');
+      const placeName = card.querySelector('.place-body h4')?.textContent.replace(/^\s*\d+\.\s*/, '').trim() ?? 'Destination';
+      const galleryButton = parsed.createElement('button');
+      galleryButton.type = 'button';
+      galleryButton.className = 'photo-gallery-trigger';
+      galleryButton.setAttribute('data-gallery-open', '');
+      galleryButton.setAttribute('aria-label', `Show more pictures of ${placeName}`);
+      galleryButton.setAttribute('aria-haspopup', 'dialog');
+      galleryButton.dataset.galleryTitle = placeName;
+      const sourcePrefix = `${galleryBasePath.split('/').pop()}-`;
+      const extraPhotos = destinationImageFiles
+        .filter((filename) => filename.startsWith(sourcePrefix))
+        .sort((left, right) => {
+          const leftNumber = Number(left.slice(sourcePrefix.length).match(/^\d+/)?.[0] ?? 0);
+          const rightNumber = Number(right.slice(sourcePrefix.length).match(/^\d+/)?.[0] ?? 0);
+          const leftRank = leftNumber === 4 ? -1 : leftNumber;
+          const rightRank = rightNumber === 4 ? -1 : rightNumber;
+          return leftRank - rightRank;
+        })
+        .map((filename) => `/images/destinations/${filename}`);
+      const primaryPhotoSource = source.startsWith('images/') ? `/${source}` : source;
+      const originalPhotoFilename = `${galleryBasePath.split('/').pop()}.jpg`;
+      const originalPhotoSource = destinationImageFiles.includes(originalPhotoFilename) ? `/images/destinations/${originalPhotoFilename}` : null;
+      const candidates = [...new Set([...extraPhotos.filter((path) => path.endsWith('-4.jpg')), primaryPhotoSource, originalPhotoSource, ...extraPhotos].filter(Boolean))];
+      galleryButton.dataset.gallerySources = JSON.stringify(candidates);
+      const prompt = parsed.createElement('span');
+      prompt.className = 'photo-gallery-prompt';
+      prompt.textContent = 'Click to show more pictures';
+      primaryPhoto.removeAttribute('onerror');
+      primaryPhoto.loading = 'lazy';
+      primaryPhoto.replaceWith(galleryButton);
+      galleryButton.append(primaryPhoto, prompt);
+    });
     parsed.querySelectorAll('.place-body p').forEach((paragraph) => {
       const label = paragraph.querySelector('strong')?.textContent.trim().toLowerCase();
       if (label?.startsWith('photo:')) paragraph.remove();
     });
+    if (file === 'credits.html' && Array.isArray(galleryPhotoCredits)) {
+      const tableBody = parsed.querySelector('.credits-table tbody');
+      galleryPhotoCredits.forEach((credit) => {
+        if (!tableBody || !credit.filename) return;
+        const row = parsed.createElement('tr');
+        [credit.filename, credit.destination, credit.photographer, credit.source, credit.license].forEach((value) => {
+          const cell = parsed.createElement('td');
+          cell.textContent = value ?? '';
+          row.append(cell);
+        });
+        const linkCell = parsed.createElement('td');
+        if (credit.page_url) {
+          const link = parsed.createElement('a');
+          link.href = credit.page_url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = 'Image page';
+          linkCell.append(link);
+        } else {
+          linkCell.textContent = 'No link provided';
+        }
+        row.append(linkCell);
+        tableBody.append(row);
+      });
+    }
     if (file === 'about.html') {
       const list = parsed.querySelector('.about-team-list');
       if (list) {
@@ -215,10 +281,102 @@ function LegacyContent({ file, searchable = false }) {
     return { markup: parsed.body.innerHTML, total, visible };
   }, [html, query]);
 
+  function handleGalleryClick(event) {
+    if (!(event.target instanceof Element)) return;
+    const trigger = event.target.closest('[data-gallery-open]');
+    if (!trigger) return;
+    try {
+      setPhotoGallery({ title: trigger.dataset.galleryTitle, sources: JSON.parse(trigger.dataset.gallerySources) });
+    } catch {
+      setPhotoGallery(null);
+    }
+  }
+
+  function handleLegacyImageError(event) {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.closest('.photo-gallery-trigger')) return;
+    const fallback = document.createElement('div');
+    fallback.className = 'image-fallback';
+    fallback.textContent = `${image.alt || 'Destination'} photo`;
+    image.closest('.photo-gallery-trigger').replaceWith(fallback);
+  }
+
   return <main className="legacy-main">
     {searchable && <div className="container browse-tools"><label htmlFor="destination-search">{file === 'directions.html' ? 'Search all destinations' : 'Search these destinations'}</label><input id="destination-search" type="search" placeholder={file === 'directions.html' ? 'Name, location, region, or type…' : 'Try a name or location…'} value={query} onChange={(event) => setQuery(event.target.value)} /><button type="button" className="search-clear" onClick={() => setQuery('')} disabled={!query}>Clear</button><span aria-live="polite">{query ? filteredResults.visible ? `Showing ${filteredResults.visible} of ${filteredResults.total} places` : 'No matching places. Try another name or location.' : file === 'directions.html' ? `Search all ${filteredResults.total} places by name, location, region, or type` : `Browse ${filteredResults.total} places by name or location`}</span></div>}
-    <div className="legacy-content" dangerouslySetInnerHTML={{ __html: filteredResults.markup }} />
+    <div className="legacy-content" onClick={handleGalleryClick} onErrorCapture={handleLegacyImageError} dangerouslySetInnerHTML={{ __html: filteredResults.markup }} />
+    {photoGallery && <PhotoGalleryModal gallery={photoGallery} onClose={() => setPhotoGallery(null)} />}
   </main>;
+}
+
+function PhotoGalleryModal({ gallery, onClose }) {
+  const [photos, setPhotos] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(null);
+
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
+    let cancelled = false;
+    Promise.all(gallery.sources.map((src) => new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve({ src, loaded: true });
+      image.onerror = () => resolve({ src, loaded: false });
+      image.src = src;
+    }))).then((results) => {
+      if (!cancelled) setPhotos(results.filter((photo) => photo.loaded).map(({ src }) => src));
+    });
+    return () => {
+      cancelled = true;
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousOverflow;
+      const returnTarget = returnFocusRef.current;
+      returnTarget?.focus?.({ preventScroll: true });
+      returnTarget?.blur?.();
+    };
+  }, [gallery]);
+
+  useEffect(() => setActiveIndex(0), [photos]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key === 'ArrowLeft') setActiveIndex((index) => (index - 1 + photos.length) % photos.length);
+      if (event.key === 'ArrowRight') setActiveIndex((index) => (index + 1) % photos.length);
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = [...dialogRef.current.querySelectorAll('button:not(:disabled)')];
+      if (!focusable.length) return;
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose, photos.length]);
+
+  const move = (delta) => setActiveIndex((index) => (index + delta + photos.length) % photos.length);
+  return <div className="photo-gallery-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="photo-gallery-dialog" role="dialog" aria-modal="true" aria-labelledby="photo-gallery-title" tabIndex={-1} ref={dialogRef}>
+      <button className="photo-gallery-close" type="button" onClick={onClose} aria-label="Close photo gallery"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+      <p className="photo-gallery-eyebrow">Explore the location</p>
+      <h2 id="photo-gallery-title">{gallery.title}</h2>
+      <p className="photo-gallery-count" aria-live="polite">{photos.length ? `${activeIndex + 1} / ${photos.length}` : 'Loading pictures…'}</p>
+      <div className="photo-gallery-stage">
+        {photos.length > 0 && <img className={/luzon-beach-4-[23]\.jpg$/.test(photos[activeIndex]) ? 'panoramic' : undefined} src={photos[activeIndex]} alt={`${gallery.title}, photo ${activeIndex + 1}`} />}
+        {photos.length > 1 && <><button type="button" className="photo-gallery-arrow previous" onClick={() => move(-1)} aria-label="Previous picture"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7" /></svg></button><button type="button" className="photo-gallery-arrow next" onClick={() => move(1)} aria-label="Next picture"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7" /></svg></button></>}
+        {!photos.length && <p className="photo-gallery-empty">No pictures could be loaded.</p>}
+      </div>
+      {photos.length > 1 && <div className="photo-gallery-thumbnails" aria-label="Choose a picture">{photos.map((src, index) => <button type="button" key={src} className={index === activeIndex ? 'active' : ''} onClick={() => setActiveIndex(index)} aria-label={`Show picture ${index + 1}`} aria-current={index === activeIndex ? 'true' : undefined}><img src={src} alt="" /></button>)}</div>}
+    </section>
+  </div>;
 }
 
 function RegionPage() {

@@ -4,6 +4,20 @@ Put your downloaded destination images in this folder. Save each photo as a JPG 
 
 Use your own downloaded images and make sure you have permission to use them on the website.
 
+OPTIONAL EXTRA PHOTOS
+
+Each destination card opens a photo gallery when its main image is clicked. The gallery displays the available extra photos.
+Save them beside the main photo with -2, -3, and -4 added before .jpg. For example:
+
+luzon-beach-1.jpg    — main Nacpan Beach photo
+luzon-beach-1-2.jpg  — extra Nacpan Beach photo 2
+luzon-beach-1-3.jpg  — extra Nacpan Beach photo 3
+luzon-beach-1-4.jpg  — extra Nacpan Beach photo 4
+
+Use the same pattern for every destination: region-type-number-2.jpg,
+region-type-number-3.jpg, and region-type-number-4.jpg. Keep each file matched
+to that destination.
+
 LUZON
 
 Beaches:
@@ -117,3 +131,4 @@ mindanao-mountain-7.jpg  —  Mount Ragang
 mindanao-mountain-8.jpg  —  Buko Buko Peak
 mindanao-mountain-9.jpg  —  Sanchez Peak
 mindanao-mountain-10.jpg  —  Mount Malindang
+
